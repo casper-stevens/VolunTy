@@ -1,6 +1,12 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+// Routes that require authentication
+const protectedRoutes = ["/admin", "/volunteer"];
+
+// Routes that should redirect to home if already authenticated
+const authRoutes = ["/login"];
+
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({
     request: {
@@ -55,7 +61,29 @@ export async function updateSession(request: NextRequest) {
   );
 
   // Refresh session if expired
-  await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const pathname = request.nextUrl.pathname;
+
+  // Check if accessing a protected route without authentication
+  const isProtectedRoute = protectedRoutes.some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`)
+  );
+
+  if (isProtectedRoute && !user) {
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("redirectTo", pathname);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  // Redirect authenticated users away from auth routes
+  const isAuthRoute = authRoutes.some((route) => pathname === route);
+
+  if (isAuthRoute && user) {
+    return NextResponse.redirect(new URL("/", request.url));
+  }
 
   return response;
 }

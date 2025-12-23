@@ -2,26 +2,29 @@
 
 import { useAuth } from "@/components/providers/AuthProvider";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState, Suspense } from "react";
 
-export default function LoginPage() {
+function LoginContent() {
   const { user, isLoading, signInWithGoogle, signInWithFacebook } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
   const [isSigningIn, setIsSigningIn] = useState(false);
 
+  const redirectTo = searchParams.get("redirectTo") || "/";
+
   useEffect(() => {
     if (user && !isLoading) {
-      router.push("/");
+      router.push(redirectTo);
     }
-  }, [user, isLoading, router]);
+  }, [user, isLoading, router, redirectTo]);
 
   const handleGoogleSignIn = async () => {
     try {
       setError(null);
       setIsSigningIn(true);
-      await signInWithGoogle();
+      await signInWithGoogle(redirectTo);
     } catch (err) {
       setError("Failed to sign in with Google. Please try again.");
       setIsSigningIn(false);
@@ -32,7 +35,7 @@ export default function LoginPage() {
     try {
       setError(null);
       setIsSigningIn(true);
-      await signInWithFacebook();
+      await signInWithFacebook(redirectTo);
     } catch (err) {
       setError("Failed to sign in with Facebook. Please try again.");
       setIsSigningIn(false);
@@ -162,5 +165,19 @@ export default function LoginPage() {
         </p>
       </div>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-slate-50">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-900"></div>
+        </div>
+      }
+    >
+      <LoginContent />
+    </Suspense>
   );
 }
