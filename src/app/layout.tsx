@@ -4,6 +4,7 @@ import "./globals.css";
 import { AuthProvider } from "@/components/providers/AuthProvider";
 import UserMenu from "@/components/UserMenu";
 import Link from "next/link";
+import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -12,15 +13,34 @@ export const metadata: Metadata = {
   description: "Volunteer Management Platform",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const supabase = createServerSupabaseClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  let role: string | null = null;
+
+  if (session?.user) {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", session.user.id)
+      .single();
+
+    if (!error) {
+      role = data?.role ?? null;
+    }
+  }
+
   return (
     <html lang="en">
       <body className={inter.className}>
-        <AuthProvider>
+        <AuthProvider initialSession={session} initialRole={role}>
           <header className="border-b border-slate-200 bg-white">
             <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 w-full">
               <Link href="/" className="text-lg font-bold text-slate-900 hover:text-slate-600 transition-colors flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-slate-100">

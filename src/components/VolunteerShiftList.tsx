@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Calendar, Clock, MapPin, User, ArrowRightLeft, CheckCircle } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Calendar, Clock, MapPin, User, ArrowRightLeft, CheckCircle, Link as LinkIcon, Copy, X } from "lucide-react";
 
 type AvailableShift = {
   id: string;
@@ -14,6 +13,7 @@ type AvailableShift = {
   location?: string;
   spotsFilled: number;
   capacity: number;
+  available: number;
 };
 
 type MyShift = {
@@ -31,56 +31,113 @@ export default function VolunteerShiftList() {
   const [availableShifts, setAvailableShifts] = useState<AvailableShift[]>([]);
   const [myShifts, setMyShifts] = useState<MyShift[]>([]);
   const [loading, setLoading] = useState(true);
+  const [calendarToken, setCalendarToken] = useState<string | null>(null);
+  const [showCalendarModal, setShowCalendarModal] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState(false);
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const res = await fetch("/api/events");
-      if (!res.ok) {
-        setLoading(false);
-        return;
-      }
-      const data = await res.json();
-      const shifts: AvailableShift[] = [];
-      data.forEach((evt: any) => {
-        (evt.sub_shifts ?? []).forEach((s: any, idx: number) => {
-          shifts.push({
-            id: s.id || `${evt.id}-${idx}`,
-            eventTitle: evt.title,
-            role: s.role_name,
-            date: (s.start_time ?? evt.start_time).slice(0, 10),
-            startTime: (s.start_time ?? evt.start_time).slice(11, 16),
-            endTime: (s.end_time ?? evt.end_time).slice(11, 16),
-            spotsFilled: 0,
-            capacity: s.capacity ?? 0,
+      try {
+        const [eventsRes, assignmentsRes, tokenRes] = await Promise.all([
+          fetch("/api/events"),
+          fetch("/api/volunteer/assignments"),
+          fetch("/api/volunteer/assignments/token"),
+        ]);
+
+        if (eventsRes.ok) {
+          const data = await eventsRes.json();
+          const shifts: AvailableShift[] = [];
+          data.forEach((evt: any) => {
+            (evt.sub_shifts ?? []).forEach((s: any, idx: number) => {
+              const start = s.start_time ?? evt.start_time;
+              const end = s.end_time ?? evt.end_time;
+              shifts.push({
+                id: s.id || `${evt.id}-${idx}`,
+                eventTitle: evt.title,
+                role: s.role_name,
+                date: start?.slice(0, 10),
+                startTime: start?.slice(11, 16),
+                endTime: end?.slice(11, 16),
+                location: evt.location,
+                spotsFilled: s.filled ?? 0,
+                capacity: s.capacity ?? 0,
+                available: Math.max((s.available ?? ((s.capacity ?? 0) - (s.filled ?? 0))), 0),
+              });
+            });
           });
-        });
-      });
-      setAvailableShifts(shifts);
-      setLoading(false);
+          setAvailableShifts(shifts.filter((s) => s.available > 0));
+        }
+
+        if (assignmentsRes.ok) {
+          const my = await assignmentsRes.json();
+          const mapped: MyShift[] = my.map((row: any) => {
+            const start = row.start_time ?? row.event_start_time;
+            const end = row.end_time ?? row.event_end_time;
+            return {
+              id: row.sub_shift_id ?? row.id,
+              eventTitle: row.event_title,
+              role: row.role_name,
+              date: start?.slice(0, 10),
+              startTime: start?.slice(11, 16),
+              endTime: end?.slice(11, 16),
+              location: row.event_location,
+              status: row.status,
+            };
+          });
+          setMyShifts(mapped);
+        }
+
+        if (tokenRes.ok) {
+          const { token } = await tokenRes.json();
+          setCalendarToken(token);
+        }
+      } finally {
+        setLoading(false);
+      }
     };
     load();
   }, []);
 
-  const handleSignup = (shiftId: string) => {
+  const handleSignup = async (shiftId: string) => {
     const shiftToMove = availableShifts.find((s) => s.id === shiftId);
     if (!shiftToMove) return;
 
-    // Remove from available
-    setAvailableShifts(availableShifts.filter((s) => s.id !== shiftId));
+    const res = await fetch("/api/volunteer/assignments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sub_shift_id: shiftId }),
+    });
 
-    // Add to my shifts
+    if (!res.ok) {
+      const { error } = await res.json().catch(() => ({ error: "Unable to sign up" }));
+      alert(error ?? "Unable to sign up for this shift.");
+      return;
+    }
+
+    const saved = await res.json();
+
+    setAvailableShifts((prev) => {
+      return prev
+        .map((s) =>
+          s.id === shiftId
+            ? { ...s, spotsFilled: s.spotsFilled + 1, available: Math.max(s.available - 1, 0) }
+            : s
+        )
+        .filter((s) => s.available > 0);
+    });
+
     setMyShifts([
       ...myShifts,
       {
-        id: shiftToMove.id,
-        eventTitle: shiftToMove.eventTitle,
-        role: shiftToMove.role,
+        id: saved.sub_shift_id ?? shiftToMove.id,
+        eventTitle: saved.event_title ?? shiftToMove.eventTitle,
+        role: saved.role_name ?? shiftToMove.role,
         date: shiftToMove.date,
         startTime: shiftToMove.startTime,
         endTime: shiftToMove.endTime,
-        location: shiftToMove.location,
-        status: "confirmed",
+        location: saved.event_location ?? shiftToMove.location,
+        status: saved.status ?? "confirmed",
       },
     ]);
 
@@ -96,6 +153,15 @@ export default function VolunteerShiftList() {
     alert("Swap request submitted! Other volunteers can now pick up this shift.");
   };
 
+  const copyFeedUrl = () => {
+    if (!calendarToken) return;
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const feedUrl = `${origin}/api/volunteer/calendar?token=${calendarToken}`;
+    navigator.clipboard.writeText(feedUrl);
+    setCopyFeedback(true);
+    setTimeout(() => setCopyFeedback(false), 2000);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -104,8 +170,117 @@ export default function VolunteerShiftList() {
     );
   }
 
+  const calendarFeedUrl = calendarToken
+    ? `${typeof window !== "undefined" ? window.location.origin : ""}/api/volunteer/calendar?token=${calendarToken}`
+    : "";
+
   return (
     <div className="space-y-8">
+      {/* Calendar Sync Section */}
+      <section className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <LinkIcon className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+            <div>
+              <h3 className="font-semibold text-blue-900">Sync to Your Calendar</h3>
+              <p className="text-sm text-blue-700 mt-1">
+                Subscribe to your shift calendar in Google Calendar, Apple Calendar, Outlook, or any calendar app.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowCalendarModal(true)}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors flex-shrink-0"
+          >
+            <LinkIcon className="h-4 w-4" />
+            Set Up
+          </button>
+        </div>
+      </section>
+
+      {/* Calendar Sync Modal */}
+      {showCalendarModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-lg max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-slate-200">
+              <h2 className="text-lg font-semibold text-slate-900">Subscribe to Calendar</h2>
+              <button
+                onClick={() => setShowCalendarModal(false)}
+                className="p-1 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <X className="h-5 w-5 text-slate-500" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Feed URL */}
+              <div>
+                <label className="block text-sm font-medium text-slate-900 mb-2">Calendar Feed URL</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={calendarFeedUrl}
+                    className="flex-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm font-mono text-slate-600"
+                  />
+                  <button
+                    onClick={copyFeedUrl}
+                    className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors flex items-center gap-2"
+                  >
+                    <Copy className="h-4 w-4" />
+                    {copyFeedback ? "Copied!" : "Copy"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Instructions */}
+              <div className="space-y-4">
+                <div>
+                  <h4 className="font-semibold text-slate-900 text-sm mb-2">Google Calendar</h4>
+                  <ol className="text-sm text-slate-700 space-y-1 list-decimal list-inside">
+                    <li>Open Google Calendar</li>
+                    <li>Click <span className="font-mono bg-slate-100 px-1 rounded">+</span> next to "Other calendars"</li>
+                    <li>Select "Subscribe to calendar"</li>
+                    <li>Paste the URL above and click "Subscribe"</li>
+                  </ol>
+                </div>
+
+                <div>
+                  <h4 className="font-semibold text-slate-900 text-sm mb-2">Apple Calendar / iCal</h4>
+                  <ol className="text-sm text-slate-700 space-y-1 list-decimal list-inside">
+                    <li>Open Calendar app</li>
+                    <li>Go to File → New Calendar Subscription</li>
+                    <li>Paste the URL above</li>
+                  </ol>
+                </div>
+
+                <div>
+                  <h4 className="font-semibold text-slate-900 text-sm mb-2">Outlook / Microsoft 365</h4>
+                  <ol className="text-sm text-slate-700 space-y-1 list-decimal list-inside">
+                    <li>Open Outlook Calendar</li>
+                    <li>Click "Add calendar" → "Subscribe from web"</li>
+                    <li>Paste the URL above</li>
+                  </ol>
+                </div>
+
+                <div className="rounded-lg bg-amber-50 border border-amber-200 p-3">
+                  <p className="text-xs text-amber-900">
+                    <strong>Keep your URL private.</strong> Anyone with this URL can see your calendar. Don't share it publicly or commit it to version control.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowCalendarModal(false)}
+                className="w-full py-2 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 transition-colors"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* My Schedule Section */}
       <section>
         <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">

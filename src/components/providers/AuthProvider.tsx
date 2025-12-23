@@ -1,8 +1,14 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
+
+type AuthProviderProps = {
+  children: React.ReactNode;
+  initialSession?: Session | null;
+  initialRole?: string | null;
+};
 
 type AuthContextType = {
   user: User | null;
@@ -15,12 +21,16 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [role, setRole] = useState<string | null>(null);
-  const supabase = createClient();
+export function AuthProvider({
+  children,
+  initialSession = null,
+  initialRole = undefined,
+}: AuthProviderProps) {
+  const [user, setUser] = useState<User | null>(initialSession?.user ?? null);
+  const [session, setSession] = useState<Session | null>(initialSession);
+  const [isLoading, setIsLoading] = useState(!initialSession || initialRole === undefined);
+  const [role, setRole] = useState<string | null>(initialRole ?? null);
+  const supabase = useMemo(() => createClient(), []);
 
   const loadRole = async (userId: string) => {
     const { data, error } = await supabase
@@ -37,39 +47,60 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    // Get initial session
-    const getInitialSession = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        await loadRole(session.user.id);
-      } else {
+    let isMounted = true;
+
+    const initialize = async () => {
+      let activeSession = session;
+
+      if (!activeSession) {
+        const {
+          data: { session: fetchedSession },
+        } = await supabase.auth.getSession();
+
+        if (!isMounted) return;
+
+        activeSession = fetchedSession;
+        setSession(fetchedSession);
+        setUser(fetchedSession?.user ?? null);
+      }
+
+      if (activeSession?.user && initialRole === undefined) {
+        await loadRole(activeSession.user.id);
+      }
+
+      if (!activeSession?.user) {
         setRole(null);
       }
-      setIsLoading(false);
+
+      if (isMounted) {
+        setIsLoading(false);
+      }
     };
 
-    getInitialSession();
+    initialize();
 
-    // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        await loadRole(session.user.id);
+    } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
+      if (!isMounted) return;
+
+      setSession(nextSession);
+      setUser(nextSession?.user ?? null);
+
+      if (nextSession?.user) {
+        await loadRole(nextSession.user.id);
       } else {
         setRole(null);
       }
+
       setIsLoading(false);
     });
 
-    return () => subscription.unsubscribe();
-  }, [supabase.auth]);
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, [supabase, initialRole]);
 
   const signInWithGoogle = async (redirectTo?: string) => {
     const callbackUrl = new URL("/auth/callback", window.location.origin);
