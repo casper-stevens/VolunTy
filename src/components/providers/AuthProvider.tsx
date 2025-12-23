@@ -8,7 +8,6 @@ type AuthContextType = {
   user: User | null;
   session: Session | null;
   isLoading: boolean;
-  signInWithGoogle: (redirectTo?: string) => Promise<void>;
   signInWithFacebook: (redirectTo?: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
@@ -46,23 +45,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, [supabase.auth]);
 
-  const signInWithGoogle = async (redirectTo?: string) => {
-    const callbackUrl = new URL("/auth/callback", window.location.origin);
-    if (redirectTo) {
-      callbackUrl.searchParams.set("next", redirectTo);
-    }
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: callbackUrl.toString(),
-      },
-    });
-    if (error) {
-      console.error("Error signing in with Google:", error.message);
-      throw error;
-    }
-  };
-
   const signInWithFacebook = async (redirectTo?: string) => {
     const callbackUrl = new URL("/auth/callback", window.location.origin);
     if (redirectTo) {
@@ -72,6 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       provider: "facebook",
       options: {
         redirectTo: callbackUrl.toString(),
+        scopes: "public_profile",
       },
     });
     if (error) {
@@ -92,7 +75,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user,
     session,
     isLoading,
-    signInWithGoogle,
     signInWithFacebook,
     signOut,
   };
