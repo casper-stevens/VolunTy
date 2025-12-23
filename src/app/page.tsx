@@ -1,83 +1,62 @@
+"use client";
+
 import Link from "next/link";
+import { useAuth } from "@/components/providers/AuthProvider";
 
 export default function Home() {
+  const { user, isLoading } = useAuth();
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-slate-50 p-4">
-      <div className="max-w-3xl text-center space-y-8">
-        <div className="space-y-4">
-          <h1 className="text-5xl font-bold tracking-tight text-slate-900 sm:text-6xl">
-            VolunTy
-          </h1>
-          <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-            The modern platform for managing work and volunteer scheduling. 
-            Organize events, manage shifts, and empower your community.
+    <main className="min-h-screen bg-white">
+      {/* Hero */}
+      <section className="relative isolate px-6 pt-24 lg:px-8">
+        <div className="mx-auto max-w-2xl text-center">
+          <h1 className="text-4xl font-bold tracking-tight text-slate-900 sm:text-6xl">VolunTy</h1>
+          <p className="mt-6 text-lg leading-8 text-slate-600">
+            Organize events, manage shifts, and empower your community — a modern platform for volunteer coordination.
           </p>
+          <div className="mt-10 flex items-center justify-center gap-x-6">
+            {!isLoading && (
+              user ? (
+                <Link href="/volunteer" className="rounded-md bg-slate-900 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800">Go to Portal</Link>
+              ) : (
+                <Link href="/login" className="rounded-md bg-slate-900 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800">Log In</Link>
+              )
+            )}
+            <Link href="/volunteer" className="text-sm font-semibold leading-6 text-slate-900">Browse Opportunities</Link>
+          </div>
         </div>
+      </section>
 
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 max-w-lg mx-auto mt-10">
-          {/* Admin Card */}
-          <Link
-            href="/admin"
-            className="group relative flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white p-8 shadow-sm transition-all hover:shadow-md hover:border-slate-300"
-          >
-            <div className="mb-4 rounded-full bg-blue-100 p-3 text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <rect width="18" height="18" x="3" y="4" rx="2" ry="2" />
-                <line x1="16" x2="16" y1="2" y2="6" />
-                <line x1="8" x2="8" y1="2" y2="6" />
-                <line x1="3" x2="21" y1="10" y2="10" />
-              </svg>
-            </div>
-            <h2 className="text-xl font-semibold text-slate-900">
-              Admin Dashboard
-            </h2>
-            <p className="mt-2 text-sm text-slate-500">
-              Manage events, create shifts, and oversee the schedule.
-            </p>
-          </Link>
-
-          {/* Volunteer Card */}
-          <Link
-            href="/volunteer"
-            className="group relative flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white p-8 shadow-sm transition-all hover:shadow-md hover:border-slate-300"
-          >
-            <div className="mb-4 rounded-full bg-green-100 p-3 text-green-600 group-hover:bg-green-600 group-hover:text-white transition-colors">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-              </svg>
-            </div>
-            <h2 className="text-xl font-semibold text-slate-900">
-              Volunteer Portal
-            </h2>
-            <p className="mt-2 text-sm text-slate-500">
-              Find opportunities, sign up for shifts, and manage your schedule.
-            </p>
-          </Link>
+      {/* Features */}
+      <section className="mx-auto max-w-6xl px-6 py-16">
+        <div className="grid gap-8 md:grid-cols-3">
+          <div className="rounded-2xl border border-slate-200 p-6 shadow-sm">
+            <h3 className="text-lg font-semibold text-slate-900">Plan Events</h3>
+            <p className="mt-2 text-sm text-slate-600">Create events with roles and sub-shifts. Track capacity and staffing at a glance.</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 p-6 shadow-sm">
+            <h3 className="text-lg font-semibold text-slate-900">Manage Shifts</h3>
+            <p className="mt-2 text-sm text-slate-600">Volunteers sign up for roles; admins monitor and adjust assignments.</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 p-6 shadow-sm">
+            <h3 className="text-lg font-semibold text-slate-900">Coordinate Teams</h3>
+            <p className="mt-2 text-sm text-slate-600">Streamline communication and keep everyone on schedule.</p>
+          </div>
         </div>
-      </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="border-t border-slate-200">
+        <div className="mx-auto max-w-6xl px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <p className="text-sm text-slate-500">© {new Date().getFullYear()} VolunTy</p>
+          <div className="flex items-center gap-6 text-sm">
+            <Link href="/privacy" className="text-slate-600 hover:text-slate-900">Privacy Policy</Link>
+            <Link href="/terms" className="text-slate-600 hover:text-slate-900">Terms of Service</Link>
+            <Link href="/data-deletion" className="text-slate-600 hover:text-slate-900">Data Deletion</Link>
+          </div>
+        </div>
+      </footer>
     </main>
   );
 }

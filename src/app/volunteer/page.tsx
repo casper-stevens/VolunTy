@@ -1,6 +1,41 @@
+"use client";
+
 import VolunteerShiftList from "@/components/VolunteerShiftList";
+import { useAuth } from "@/components/providers/AuthProvider";
+import Link from "next/link";
 
 export default function VolunteerPortal() {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-900"></div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="max-w-md text-center space-y-6">
+          <div className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm">
+            <h2 className="text-2xl font-bold text-slate-900 mb-4">Login Required</h2>
+            <p className="text-slate-600 mb-6">
+              Please log in to view volunteer opportunities and manage your shifts.
+            </p>
+            <Link
+              href="/login?redirectTo=/volunteer"
+              className="inline-block w-full bg-slate-900 text-white px-6 py-3 rounded-lg font-medium hover:bg-slate-800 transition-colors"
+            >
+              Log In
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 p-8">
       <div className="max-w-7xl mx-auto">

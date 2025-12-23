@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Calendar, dateFnsLocalizer, Views, View } from "react-big-calendar";
 import { format, parse, startOfWeek, getDay } from "date-fns";
 import { enUS } from "date-fns/locale";
@@ -20,60 +20,78 @@ const localizer = dateFnsLocalizer({
   locales,
 });
 
-// Mock data for demonstration
-const MOCK_EVENTS = [
-  {
-    id: 1,
-    title: "Summer Festival",
-    start: new Date(2025, 11, 25, 10, 0), // Dec 25, 2025
-    end: new Date(2025, 11, 25, 18, 0),
-    resource: {
-      filled: 12,
-      capacity: 20,
-      isCritical: false,
-    },
-  },
-  {
-    id: 2,
-    title: "Charity Gala Setup",
-    start: new Date(2025, 11, 26, 9, 0),
-    end: new Date(2025, 11, 26, 14, 0),
-    resource: {
-      filled: 2,
-      capacity: 10,
-      isCritical: true, // < 48h and low staff
-    },
-  },
-];
+type CalendarEvent = {
+  id: string;
+  title: string;
+  start: Date;
+  end: Date;
+  resource: { filled: number; capacity: number; isCritical: boolean };
+};
 
 export default function AdminCalendar() {
-  const [events, setEvents] = useState(MOCK_EVENTS);
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [view, setView] = useState<View>(Views.MONTH);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+
+  // Load events from API
+  useEffect(() => {
+    const load = async () => {
+      const res = await fetch("/api/events");
+      if (!res.ok) return;
+      const data = await res.json();
+      const mapped: CalendarEvent[] = data.map((evt: any) => ({
+        id: evt.id,
+        title: evt.title,
+        start: new Date(evt.start_time),
+        end: new Date(evt.end_time),
+        resource: {
+          filled: evt.filled ?? 0,
+          capacity: evt.capacity ?? 0,
+          isCritical: false,
+        },
+      }));
+      setEvents(mapped);
+    };
+    load();
+  }, []);
 
   const handleSelectSlot = ({ start }: { start: Date }) => {
     setSelectedDate(start);
     setIsModalOpen(true);
   };
 
-  const handleSaveEvent = (newEvent: any) => {
-    // Calculate total capacity from sub-shifts
-    const totalCapacity = newEvent.subShifts.reduce(
-      (acc: number, curr: any) => acc + curr.capacity,
-      0
-    );
-
+  const handleSaveEvent = async (newEvent: any) => {
+    const res = await fetch("/api/events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: newEvent.title,
+        start_time: newEvent.start.toISOString(),
+        end_time: newEvent.end.toISOString(),
+        sub_shifts: newEvent.subShifts.map((s: any) => ({
+          role_name: s.roleName,
+          start_time: `${newEvent.start.toISOString().split("T")[0]}T${s.startTime}:00Z`,
+          end_time: `${newEvent.end.toISOString().split("T")[0]}T${s.endTime}:00Z`,
+          capacity: s.capacity,
+        })),
+      }),
+    });
+    if (!res.ok) {
+      // Could show error toast
+      return;
+    }
+    const created = await res.json();
     setEvents([
       ...events,
       {
-        id: events.length + 1,
-        title: newEvent.title,
-        start: newEvent.start,
-        end: newEvent.end,
+        id: created.id,
+        title: created.title,
+        start: new Date(created.start_time),
+        end: new Date(created.end_time),
         resource: {
           filled: 0,
-          capacity: totalCapacity,
+          capacity: (created.capacity ?? 0),
           isCritical: false,
         },
       },

@@ -66,16 +66,29 @@ export default function CreateEventModal({
     );
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Construct the event object
     const eventData = {
       title,
       start: new Date(`${date}T${startTime}`),
       end: new Date(`${date}T${endTime}`),
       subShifts,
     };
-    onSave(eventData);
+    await Promise.resolve(onSave(eventData));
+    // Clear form after successful creation
+    setTitle("");
+    setDate(initialDate ? initialDate.toISOString().split("T")[0] : "");
+    setStartTime("09:00");
+    setEndTime("17:00");
+    setSubShifts([
+      {
+        id: "1",
+        roleName: "General Volunteer",
+        startTime: "09:00",
+        endTime: "17:00",
+        capacity: 5,
+      },
+    ]);
     onClose();
   };
 
