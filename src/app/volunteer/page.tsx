@@ -1,11 +1,14 @@
 "use client";
 
 import VolunteerShiftList from "@/components/VolunteerShiftList";
+import VolunteerSwapRequests from "@/components/VolunteerSwapRequests";
 import { useAuth } from "@/components/providers/AuthProvider";
 import Link from "next/link";
+import { useState } from "react";
 
 export default function VolunteerPortal() {
   const { user, isLoading } = useAuth();
+  const [activeTab, setActiveTab] = useState<"shifts" | "swaps">("shifts");
 
   if (isLoading) {
     return (
@@ -46,7 +49,33 @@ export default function VolunteerPortal() {
           </p>
         </div>
 
-        <VolunteerShiftList />
+        {/* Tabs */}
+        <div className="flex gap-4 mb-8 border-b border-slate-200">
+          <button
+            onClick={() => setActiveTab("shifts")}
+            className={`px-4 py-3 font-medium border-b-2 transition-colors ${
+              activeTab === "shifts"
+                ? "border-slate-900 text-slate-900"
+                : "border-transparent text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            My Shifts
+          </button>
+          <button
+            onClick={() => setActiveTab("swaps")}
+            className={`px-4 py-3 font-medium border-b-2 transition-colors ${
+              activeTab === "swaps"
+                ? "border-slate-900 text-slate-900"
+                : "border-transparent text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            Swap Requests
+          </button>
+        </div>
+
+        {/* Tab Content */}
+        {activeTab === "shifts" && <VolunteerShiftList />}
+        {activeTab === "swaps" && <VolunteerSwapRequests />}
       </div>
     </div>
   );

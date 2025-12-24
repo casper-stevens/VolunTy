@@ -33,17 +33,22 @@ export function AuthProvider({
   const supabase = useMemo(() => createClient(), []);
 
   const loadRole = async (userId: string) => {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", userId)
-      .single();
-    if (error) {
-      console.error("Error loading role:", error.message);
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", userId)
+        .single();
+      if (error) {
+        console.error("Error loading role:", error.message);
+        setRole(null);
+        return;
+      }
+      setRole(data?.role ?? null);
+    } catch (e: any) {
+      console.error("Exception loading role:", e);
       setRole(null);
-      return;
     }
-    setRole(data?.role ?? null);
   };
 
   useEffect(() => {

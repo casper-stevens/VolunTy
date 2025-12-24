@@ -144,13 +144,32 @@ export default function VolunteerShiftList() {
     alert(`Successfully signed up for ${shiftToMove.role} at ${shiftToMove.eventTitle}!`);
   };
 
-  const handleSwapRequest = (shiftId: string) => {
-    setMyShifts(
-      myShifts.map((s) =>
-        s.id === shiftId ? { ...s, status: "pending_swap" } : s
-      )
-    );
-    alert("Swap request submitted! Other volunteers can now pick up this shift.");
+  const handleSwapRequest = async (assignmentId: string) => {
+    try {
+      const res = await fetch("/api/volunteer/swap-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assignment_id: assignmentId }),
+      });
+
+      if (!res.ok) {
+        const { error } = await res.json().catch(() => ({ error: "Failed to create swap request" }));
+        alert(error ?? "Failed to create swap request");
+        return;
+      }
+
+      const { share_link } = await res.json();
+
+      setMyShifts(
+        myShifts.map((s) =>
+          s.id === assignmentId ? { ...s, status: "pending_swap" } : s
+        )
+      );
+
+      alert(`Swap request created! Share this link with other volunteers:\n\n${window.location.origin}${share_link}`);
+    } catch (e) {
+      alert("Failed to create swap request");
+    }
   };
 
   const copyFeedUrl = () => {
