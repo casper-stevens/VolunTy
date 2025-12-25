@@ -126,22 +126,25 @@ export default function AdminSchedule() {
   const combineDateAndTime = (date: string, time: string) =>
     combineDateAndTimeInTimezone(date, time, timezone);
 
-  const persistEvent = async (payload: any, existingId?: string) => {
+  const persistEvent = async (payload: any, existingId?: string): Promise<{ ok: boolean; status: number; body?: any }> => {
     if (existingId) {
       const res = await fetch("/api/events", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: existingId, ...payload }),
       });
-      if (!res.ok) return;
-      return;
+      let body: any = undefined;
+      try { body = await res.json(); } catch {}
+      return { ok: res.ok, status: res.status, body };
     }
     const res = await fetch("/api/events", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    if (!res.ok) return;
+    let body: any = undefined;
+    try { body = await res.json(); } catch {}
+    return { ok: res.ok, status: res.status, body };
   };
 
   const handleSaveEvent = async (evt: any) => {
@@ -163,18 +166,32 @@ export default function AdminSchedule() {
 
       if (id) {
         // For editing, only update the single event
-        const payload = {
+        let payload = {
           title,
           start_time: `${startDate}T${startTime}:00.000Z`,
           end_time: `${endDate}T${endTime}:00.000Z`,
           sub_shifts: subShifts.map((s: any) => ({
+            id: s.id,
             role_name: s.roleName,
             start_time: `${s.startDate}T${s.startTime}:00.000Z`,
             end_time: `${s.endDate}T${s.endTime}:00.000Z`,
             capacity: s.capacity,
           })),
         };
-        await persistEvent(payload, id);
+        let result = await persistEvent(payload, id);
+        if (!result.ok && result.status === 409 && result.body?.assigned_sub_shifts) {
+          const total = Object.values(result.body.counts || {}).reduce((a: number, b: any) => a + (typeof b === 'number' ? b : 0), 0);
+          const confirmMsg = `You're about to delete ${result.body.assigned_sub_shifts.length} sub-shift(s) with ${total} assignment(s).\nThis will remove assigned volunteers from these roles.\n\nDo you want to proceed?`;
+          const yes = window.confirm(confirmMsg);
+          if (yes) {
+            payload = { ...payload, force: true };
+            result = await persistEvent(payload, id);
+          }
+        }
+        if (!result.ok) {
+          const msg = result.body?.error || "Failed to save event";
+          throw new Error(msg);
+        }
       } else {
         // For creating, create an event for each date
         for (const dateStr of dates) {
@@ -195,16 +212,20 @@ export default function AdminSchedule() {
               return null;
             }).filter((s: any) => s !== null),
           };
-          await persistEvent(payload);
+          const result = await persistEvent(payload);
+          if (!result.ok) {
+            const msg = result.body?.error || "Failed to create event";
+            throw new Error(msg);
+          }
         }
       }
 
       await loadEvents();
       setIsModalOpen(false);
       setEditingEvent(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to save event:", error);
-      alert("Failed to save event. Please try again.");
+      alert(error?.message || "Failed to save event. Please try again.");
     } finally {
       setIsSaving(false);
     }

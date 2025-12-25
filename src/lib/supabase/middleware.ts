@@ -90,7 +90,7 @@ export async function updateSession(request: NextRequest) {
       .select("role")
       .eq("id", user.id)
       .single();
-    if (!profile || profile.role !== "admin") {
+    if (!profile || !["admin", "super_admin"].includes(profile.role)) {
       return NextResponse.redirect(new URL("/", request.url));
     }
   }

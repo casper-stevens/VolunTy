@@ -1,10 +1,29 @@
 import { NextResponse } from "next/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
+import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
 
 function getAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   return createAdminClient(url, key);
+}
+
+async function requireAdmin() {
+  const supabase = createServerSupabaseClient();
+  const { data: userData, error: userErr } = await supabase.auth.getUser();
+  if (userErr || !userData.user) {
+    return { ok: false, status: 401, error: "Unauthorized" } as const;
+  }
+  const user = userData.user;
+  const { data: profile, error: profErr } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  if (profErr || !profile || !["admin", "super_admin"].includes(profile.role)) {
+    return { ok: false, status: 403, error: "Forbidden" } as const;
+  }
+  return { ok: true } as const;
 }
 
 export async function GET() {
@@ -85,6 +104,11 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const auth = await requireAdmin();
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+
     const body = await request.json();
     const { title, start_time, end_time, sub_shifts } = body;
     if (!title || !start_time || !end_time) {
@@ -121,8 +145,20 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
+    const auth = await requireAdmin();
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+
     const body = await request.json();
-    const { id, title, start_time, end_time, sub_shifts } = body;
+    const { id, title, start_time, end_time, sub_shifts, force } = body as {
+      id: string;
+      title: string;
+      start_time: string;
+      end_time: string;
+      sub_shifts?: Array<{ id?: string; role_name: string; start_time: string; end_time: string; capacity?: number }>;
+      force?: boolean;
+    };
     if (!id || !title || !start_time || !end_time) {
       return NextResponse.json({ error: "Missing fields" }, { status: 400 });
     }
@@ -135,70 +171,107 @@ export async function PUT(request: Request) {
     if (evErr) throw evErr;
 
     // Only re-process sub_shifts if they were explicitly provided in the request
-    if (Array.isArray(sub_shifts) && sub_shifts.length > 0) {
-      // Fetch existing sub_shifts to intelligently merge
+    if (Array.isArray(sub_shifts)) {
+      // Fetch existing sub_shifts
       const { data: existingSubShifts, error: fetchErr } = await admin
         .from("sub_shifts")
         .select("id,role_name,start_time,end_time,capacity")
         .eq("event_id", id);
       if (fetchErr) throw fetchErr;
 
-      const newSubShiftSpecs = sub_shifts.map((s: any) => ({
-        role_name: s.role_name,
-        start_time: s.start_time,
-        end_time: s.end_time,
-        capacity: s.capacity ?? 1,
-      }));
+      const existingById = new Map<string, any>();
+      (existingSubShifts ?? []).forEach((s) => existingById.set(s.id, s));
 
-      const existingMap = new Map<string, any>(
-        (existingSubShifts ?? []).map((s) => {
+      const payloadIds = new Set<string>();
+
+      // First, update by id when provided (preserves assignments even if times/role change)
+      for (const s of sub_shifts) {
+        if (s.id) {
+          payloadIds.add(s.id);
+          const { error: upErr } = await admin
+            .from("sub_shifts")
+            .update({
+              role_name: s.role_name,
+              start_time: s.start_time,
+              end_time: s.end_time,
+              capacity: s.capacity ?? 1,
+            })
+            .eq("id", s.id);
+          if (upErr) throw upErr;
+        }
+      }
+
+      // For items without id: try matching by role/time, else insert new
+      const existingByKey = new Map<string, any>();
+      (existingSubShifts ?? []).forEach((s) => {
+        existingByKey.set(`${s.role_name}|${s.start_time}|${s.end_time}`, s);
+      });
+
+      for (const s of sub_shifts) {
+        if (!s.id) {
           const key = `${s.role_name}|${s.start_time}|${s.end_time}`;
-          return [key, s];
-        })
-      );
+          const existing = existingByKey.get(key);
+          if (existing) {
+            payloadIds.add(existing.id);
+            if (existing.capacity !== (s.capacity ?? 1)) {
+              const { error: upErr } = await admin
+                .from("sub_shifts")
+                .update({ capacity: s.capacity ?? 1 })
+                .eq("id", existing.id);
+              if (upErr) throw upErr;
+            }
+          } else {
+            const { data: inserted, error: insErr } = await admin
+              .from("sub_shifts")
+              .insert({
+                event_id: id,
+                role_name: s.role_name,
+                start_time: s.start_time,
+                end_time: s.end_time,
+                capacity: s.capacity ?? 1,
+              })
+              .select("id")
+              .single();
+            if (insErr) throw insErr;
+            if (inserted?.id) payloadIds.add(inserted.id);
+          }
+        }
+      }
 
-      const newSpecs = new Set<string>(
-        newSubShiftSpecs.map((s) => `${s.role_name}|${s.start_time}|${s.end_time}`)
-      );
-
-      // Delete sub_shifts that no longer exist (this cascades to delete assignments)
-      // Only delete if the role_name|start_time|end_time combination is completely gone
+      // Determine deletions: existing ids not present in payloadIds
       const idsToDelete = (existingSubShifts ?? [])
-        .filter((s) => !newSpecs.has(`${s.role_name}|${s.start_time}|${s.end_time}`))
-        .map((s) => s.id);
+        .map((s) => s.id)
+        .filter((eid) => !payloadIds.has(eid));
 
       if (idsToDelete.length > 0) {
+        const { data: assigned, error: assignCheckErr } = await admin
+          .from("shift_assignments")
+          .select("id, sub_shift_id")
+          .in("sub_shift_id", idsToDelete);
+        if (assignCheckErr) throw assignCheckErr;
+
+        const assignedMap: Record<string, number> = {};
+        (assigned ?? []).forEach((a: any) => {
+          assignedMap[a.sub_shift_id] = (assignedMap[a.sub_shift_id] ?? 0) + 1;
+        });
+
+        const hasAssigned = Object.keys(assignedMap).length > 0;
+        if (hasAssigned && !force) {
+          return NextResponse.json(
+            {
+              error: "One or more sub-shifts have assigned volunteers. Confirm deletion to proceed.",
+              assigned_sub_shifts: Object.keys(assignedMap),
+              counts: assignedMap,
+            },
+            { status: 409 }
+          );
+        }
+
         const { error: delErr } = await admin
           .from("sub_shifts")
           .delete()
           .in("id", idsToDelete);
         if (delErr) throw delErr;
-      }
-
-      // Insert or update remaining sub_shifts
-      // IMPORTANT: Only update capacity, never recreate to preserve shift assignments
-      for (const newSpec of newSubShiftSpecs) {
-        const key = `${newSpec.role_name}|${newSpec.start_time}|${newSpec.end_time}`;
-        const existing = existingMap.get(key);
-
-        if (existing) {
-          // Update capacity if needed - preserves all shift assignments
-          if (existing.capacity !== newSpec.capacity) {
-            const { error: upErr } = await admin
-              .from("sub_shifts")
-              .update({ capacity: newSpec.capacity })
-              .eq("id", existing.id);
-            if (upErr) throw upErr;
-          }
-          // If capacity is the same, do nothing - don't touch the sub_shift
-        } else {
-          // Insert new sub_shift only if it's completely new
-          const { error: insErr } = await admin.from("sub_shifts").insert({
-            event_id: id,
-            ...newSpec,
-          });
-          if (insErr) throw insErr;
-        }
       }
     }
     // If sub_shifts is not provided, leave existing ones alone
@@ -211,6 +284,11 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    const auth = await requireAdmin();
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     if (!id) {
