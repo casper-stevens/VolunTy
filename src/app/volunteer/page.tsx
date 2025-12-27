@@ -1,6 +1,7 @@
 "use client";
 
 import VolunteerShiftList from "@/components/VolunteerShiftList";
+import PushNotificationToggle from "@/components/PushNotificationToggle";
 import { useAuth } from "@/components/providers/AuthProvider";
 import Link from "next/link";
 import { useState } from "react";
@@ -46,6 +47,12 @@ export default function VolunteerPortal() {
           <p className="text-slate-500 mt-2">
             Find your next opportunity or manage your existing shifts.
           </p>
+        </div>
+
+        {/* Push Notifications */}
+        <div className="mb-8">
+          <h2 className="text-xl font-bold text-slate-900 mb-4">Notifications</h2>
+          <PushNotificationToggle />
         </div>
 
         {/* Tabs */}

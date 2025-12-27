@@ -1,14 +1,43 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
-export async function GET(request: Request) {
+async function requireAdmin() {
+  const supabase = createClient();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError || !user) {
+    return { ok: false, status: 401, error: "Unauthorized" } as const;
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (profileError || !profile || !["admin", "super_admin"].includes(profile.role)) {
+    return { ok: false, status: 403, error: "Forbidden" } as const;
+  }
+
+  return { ok: true, user, role: profile.role } as const;
+}
+
+export async function GET() {
   try {
+    const auth = await requireAdmin();
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+
     const supabase = createClient();
-    
-    // Try to get the current user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    
-    // Get all users (admin only - for debugging)
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
     const { data: profiles, error: profilesError } = await supabase
       .from("profiles")
       .select("id, full_name, role, calendar_token")
@@ -23,9 +52,6 @@ export async function GET(request: Request) {
       },
     });
   } catch (e: any) {
-    return NextResponse.json(
-      { error: e.message },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }

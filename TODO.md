@@ -6,85 +6,82 @@
 
 ## 🔴 High Priority Issues
 
-### 1. Database Migration Documentation Outdated
-**Status:** New issue (Dec 27, 2025)  
-**Files:** [`DEPLOYMENT.md`](DEPLOYMENT.md), [`supabase/migrations/`](supabase/migrations/)
+- All high-priority items resolved on Dec 27, 2025
 
-- Deployment guide references `20240523000000_initial_schema.sql` which no longer exists
-- Migrations were consolidated on Dec 27, 2025 into:
-  - `20240522000000_initial_setup.sql` (complete schema with all tables and policies)
-  - `20240523000000_functions_and_triggers.sql` (database functions, triggers, default settings)
-- **Action needed:** Update DEPLOYMENT.md to reflect the correct migration files and execution order
+### ✅ Database Migration Documentation Updated
+**Status:** Completed (Dec 27, 2025)  
 
-### 2. Debug Endpoint Should Be Removed or Secured
-**Status:** New issue (Dec 27, 2025)  
-**Files:** [`src/app/api/debug/auth/route.ts`](src/app/api/debug/auth/route.ts)
+- Deployment guide now points to `20240522000000_initial_setup.sql` and `20240523000000_functions_and_triggers.sql` with correct execution order
 
-- Created for troubleshooting authentication issues
-- Exposes user data and environment information without authentication
-- **Action needed:** Either remove before production or add admin-only authentication check
+### ✅ Debug Endpoint Locked Down
+**Status:** Completed (Dec 27, 2025)  
+
+- Added admin-only guard to the debug auth endpoint to prevent unauthenticated access
 
 ---
 
-## 🟡 Medium Priority Features
+**Files:** [`src/components/AdminSchedule.tsx`](src/components/AdminSchedule.tsx)
 
-### 3. Two Calendar Components - One Unused
-**Status:** Code cleanup needed  
-**Files:** [`src/components/AdminSchedule.tsx`](src/components/AdminSchedule.tsx), [`src/components/AdminCalendar.tsx`](src/components/AdminCalendar.tsx)
+- Removed unused `AdminCalendar.tsx`; admin events page remains on tailored `AdminSchedule`
 
-- `AdminSchedule.tsx` is imported and used in admin events page
-- `AdminCalendar.tsx` (react-big-calendar with timezone support) exists but is never imported
-- **Action needed:** Decide which to keep, remove or properly wire up the other
-
-### 4. Admin Role Management Component Unused
-**Status:** Redundant component  
-**Files:** [`src/components/AdminRoles.tsx`](src/components/AdminRoles.tsx)
-
-- Standalone AdminRoles component exists but is never imported
-- Role management functionality is already integrated into AdminVolunteersList component
-- AdminVolunteersList provides promote/demote features with better UX (in context of volunteer details)
-- **Action needed:** Remove AdminRoles.tsx as it's redundant
-
-### 5. SuperadminTransfer Component Not Integrated
-**Status:** Orphaned component  
-**Files:** [`src/components/SuperadminTransfer.tsx`](src/components/SuperadminTransfer.tsx)
-
-- Component exists for super admin role transfer
-- Not integrated into any page (settings, volunteers)
-- Super admin transfer is mentioned in previous TODO but no UI access
-- **Action needed:** Integrate into admin settings page for super_admin users only
-
-### 6. Settings are Minimal
-**Status:** Incomplete  
+### ✅ Admin Role Management Component Removed
+### ✅ SuperadminTransfer Integrated
+### 11. Settings Persistence Issues
+**Status:** Needs investigation  
 **Files:** [`src/app/admin/settings/page.tsx`](src/app/admin/settings/page.tsx), [`src/app/api/settings/route.ts`](src/app/api/settings/route.ts)
 
-- Only has timezone selector
-- Missing:
-  - Organization name/logo
-  - Notification preferences
-  - Reminder timing configs
-  - Allow self-signup toggle (exists in DB but no UI)
-- `user_preferences` table exists but no UI to manage it
-- **Action needed:** Expand settings UI with org config and user preferences
+- Several new settings controls report not working (org name, logo URL, self-signup, notifications, reminder hours, user preferences)
+- Verify values persist and reload via `organization_settings` and `user_preferences`
+- Check client save handlers, API upserts, and RLS behavior
+- **Action needed:** Debug and fix non-working settings and preference saves
+**Status:** Completed (Dec 27, 2025)  
+**Files:** [`src/components/SuperadminTransfer.tsx`](src/components/SuperadminTransfer.tsx), [`src/app/admin/settings/page.tsx`](src/app/admin/settings/page.tsx)
+
+- Integrated floating Superadmin control into Admin Settings page
+- Visible only to `super_admin` users (component self-gates by role)
+- Fixed transfer flow: promote target first, then demote current user
+- Uses existing `/api/auth/me` and `/api/admin/users` routes with proper auth checks
+
+### ✅ Settings Expanded
+**Status:** Completed (Dec 27, 2025)  
+**Files:** [`src/app/admin/settings/page.tsx`](src/app/admin/settings/page.tsx), [`src/app/api/settings/route.ts`](src/app/api/settings/route.ts)
+
+- Added organization config: name, logo URL, allow self-signup, notifications enabled
+- Added reminder timing config (hours before shift)
+- Timezone selector retained
+- Added user preferences UI: dark mode preference and email notifications (per-user)
+- Org settings persisted via `organization_settings` keys; user prefs saved via Supabase RLS upsert
+
+---
+
+### ✅ Push Notifications System Implemented
+**Status:** Completed (Dec 27, 2025)  
+**Files:** [`src/lib/pushNotifications.ts`](src/lib/pushNotifications.ts), [`src/components/PushNotificationToggle.tsx`](src/components/PushNotificationToggle.tsx), [`src/app/api/volunteer/push-subscription/route.ts`](src/app/api/volunteer/push-subscription/route.ts), [`public/sw.js`](public/sw.js)
+
+- Implemented browser push notification support
+- Volunteers can enable/disable via toggle button on portal
+- Shows system permission dialog when enabled
+- Apple device detection with detailed guidance for iOS/Mac users
+- Service worker handles notification delivery and clicks
+- Subscription data stored in `user_preferences` table
+- Database migration: `20240528000000_add_push_notifications.sql`
 
 ---
 
 ## 🔵 Low Priority / Future Features
 
-### 7. No Notification/Reminder System
-**Status:** Not implemented (README promises this)  
-**Impact:** Critical feature missing
+### 7. Notification/Reminder System - Phase 2
+**Status:** Partially implemented  
+**Impact:** Core feature in progress
 
+- ✅ Push notifications UI and storage ready
 - README promises "Automatic Reminders 24h before shifts"
 - README promises "48h unfilled slot alerts for admins"
-- No email sending code anywhere (no Resend/SendGrid integration)
-- No cron jobs or scheduled functions (Supabase Edge Functions or similar)
-- `user_preferences.email_notifications` exists but isn't used
 - **Action needed:**
-  1. Set up email service (Resend/SendGrid)
-  2. Create scheduled function for reminder checks
-  3. Implement email templates
-  4. Add notification preference UI
+  1. Set up push service backend (e.g., Firebase Cloud Messaging, Web Push Library)
+  2. Create scheduled function for reminder checks (Supabase Edge Functions or cron job)
+  3. Implement notification sending logic for shift reminders
+  4. Add admin notification for understaffed shifts
 
 ### 8. Database Features Not Implemented
 **Status:** Schema exists, code missing
@@ -135,25 +132,29 @@
 
 | Priority | Count | Status |
 |----------|-------|--------|
-| 🔴 High  | 2     | Documentation & security issues |
-| 🟡 Medium | 4    | Component cleanup & missing features |
+| 🔴 High  | 0     | Resolved on Dec 27, 2025 |
+| 🟡 Medium | 1    | Settings persistence investigation |
 | 🔵 Low   | 4     | Future enhancements |
-| **Total** | **10** | Open issues |
+| **Total** | **5** | Open issues |
 
 ---
 
 ## Notes
 
-- Documentation and debug endpoint should be addressed before production deployment
-- Several UI components exist but are not integrated (SuperadminTransfer, AdminRoles, AdminCalendar)
+- Several UI components exist but are not integrated (SuperadminTransfer)
 - Notification system is a major promised feature that's completely missing
 - Several database fields/tables exist but are unused (technical debt)
 - Consider creating GitHub issues for tracking individual items
 
 ## Recent Changes (Dec 27, 2025)
 
+- ✅ Deployment guide now references consolidated migrations (initial_setup + functions_and_triggers)
+- ✅ Debug auth endpoint restricted to admin/super_admin
+- ✅ Removed unused AdminCalendar; kept AdminSchedule as the events UI
+- ✅ Removed redundant AdminRoles (role management is in AdminVolunteersList)
 - ✅ Consolidated database migrations from 6 files into 2 comprehensive migration files
 - ✅ Enhanced auth callback with better OAuth error handling and logging
 - ✅ Added debug endpoint for authentication troubleshooting
 - ✅ All high-priority security issues from Dec 24 have been completed (swap requests, auth enforcement, middleware protection, event editing safeguards)
 - ✅ Admin volunteers view fully implemented with role management
+- ✅ Integrated SuperadminTransfer into settings and fixed transfer order

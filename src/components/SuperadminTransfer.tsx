@@ -24,6 +24,7 @@ export default function SuperadminTransfer() {
       if (authRes.ok) {
         const { user } = await authRes.json();
         setCurrentUserId(user.id);
+        setCurrentUserRole(user.role);
       }
 
       // Get all admins
@@ -34,12 +35,6 @@ export default function SuperadminTransfer() {
           ["admin", "super_admin"].includes(u.role)
         );
         setAdmins(filteredAdmins);
-
-        // Find current user's role
-        const currentUser = filteredAdmins.find((u: any) => u.id === currentUserId);
-        if (currentUser) {
-          setCurrentUserRole(currentUser.role);
-        }
       }
     } finally {
       setLoading(false);
@@ -67,18 +62,7 @@ export default function SuperadminTransfer() {
     setSuccess(false);
 
     try {
-      // First, demote current user to admin
-      const demoteRes = await fetch("/api/admin/users", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: currentUserId, role: "admin" }),
-      });
-
-      if (!demoteRes.ok) {
-        throw new Error("Failed to demote current user");
-      }
-
-      // Then, promote selected admin to super_admin
+      // Promote selected admin to super_admin first (requires current user to still be super_admin)
       const promoteRes = await fetch("/api/admin/users", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -87,6 +71,17 @@ export default function SuperadminTransfer() {
 
       if (!promoteRes.ok) {
         throw new Error("Failed to promote new super_admin");
+      }
+
+      // Then, demote current user to admin
+      const demoteRes = await fetch("/api/admin/users", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: currentUserId, role: "admin" }),
+      });
+
+      if (!demoteRes.ok) {
+        throw new Error("Failed to demote current user");
       }
 
       setSuccess(true);
