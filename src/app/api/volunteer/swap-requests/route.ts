@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
 import crypto from "crypto";
+import webpush from "web-push";
 
 function adminClient() {
   return createAdminClient(
@@ -145,11 +146,63 @@ export async function POST(request: Request) {
 
     if (updateErr) throw updateErr;
 
+    // Fetch shift details for notification payload
+    const { data: shiftDetail } = await admin
+      .from("shift_assignments")
+      .select(
+        "id, sub_shifts(role_name, start_time, events(title, start_time))"
+      )
+      .eq("id", assignment_id)
+      .single();
+
+    const subShift = Array.isArray(shiftDetail?.sub_shifts)
+      ? shiftDetail?.sub_shifts[0]
+      : shiftDetail?.sub_shifts;
+
+    // Load push subscriptions (exclude requester)
+    const { data: subscriptions } = await admin
+      .from("user_preferences")
+      .select("user_id, push_subscription")
+      .eq("push_notifications_enabled", true)
+      .not("push_subscription", "is", null)
+      .neq("user_id", user.id);
+
+    let sent = 0;
+
+    if (subscriptions && subscriptions.length > 0 && subShift?.start_time) {
+      // Configure VAPID once
+      webpush.setVapidDetails(
+        process.env.VAPID_SUBJECT!,
+        process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+        process.env.VAPID_PRIVATE_KEY!
+      );
+
+      const role = subShift.role_name || "Shift";
+      const when = new Date(subShift.start_time).toLocaleString();
+      const payload = JSON.stringify({
+        title: "New Swap Request",
+        body: `${role} on ${when} is available to swap`,
+        data: { url: "/swap-requests" },
+        tag: `swap-${inserted.id}`,
+      });
+
+      for (const sub of subscriptions) {
+        try {
+          if (!sub.push_subscription) continue;
+          await webpush.sendNotification(sub.push_subscription as any, payload);
+          sent++;
+        } catch (err) {
+          console.error("swap push send error", err);
+        }
+      }
+    }
+
     return NextResponse.json({
       id: inserted.id,
       share_token: inserted.share_token,
       share_link: `/swap-requests/${inserted.share_token}`,
       created_at: inserted.created_at,
+      notifications_sent: sent,
     });
   } catch (e: any) {
     return NextResponse.json(
