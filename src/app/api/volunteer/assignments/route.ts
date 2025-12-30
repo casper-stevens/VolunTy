@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
+import { sendShiftAssignmentNotification } from "@/lib/notificationHelpers";
 
 function adminClient() {
   return createAdminClient(
@@ -153,6 +154,16 @@ export async function POST(request: Request) {
       event_start_time: evt?.start_time ?? null,
       event_end_time: evt?.end_time ?? null,
     };
+
+    // Send assignment notification (fire and forget - don't wait for it)
+    sendShiftAssignmentNotification(user.id, {
+      eventTitle: evt?.title ?? "Event",
+      roleName: subShift.role_name,
+      startTime: subShift.start_time ?? evt?.start_time ?? new Date().toISOString(),
+      location: evt?.location,
+    }).catch((err) => {
+      console.error("Failed to send assignment notification:", err);
+    });
 
     return NextResponse.json(responsePayload);
   } catch (e: any) {

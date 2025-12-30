@@ -7,6 +7,7 @@ import {
   Loader2,
   AlertCircle,
   Info,
+  Settings,
 } from "lucide-react";
 import {
   isPushNotificationSupported,
@@ -16,6 +17,7 @@ import {
   unsubscribeFromPushNotifications,
   sendSubscriptionToBackend,
 } from "@/lib/pushNotifications";
+import NotificationPreferencesModal from "./NotificationPreferencesModal";
 
 export default function PushNotificationToggle() {
   const [isSupported, setIsSupported] = useState(false);
@@ -25,6 +27,7 @@ export default function PushNotificationToggle() {
   const [error, setError] = useState<string | null>(null);
   const [showAppleGuide, setShowAppleGuide] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+  const [showPreferencesModal, setShowPreferencesModal] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
@@ -123,18 +126,32 @@ export default function PushNotificationToggle() {
               </p>
             </div>
           </div>
-          <button
-            onClick={handleToggle}
-            disabled={isLoading}
-            className={`px-6 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
-              hasSubscription
-                ? "bg-red-100 text-red-700 hover:bg-red-200 disabled:bg-red-100 disabled:opacity-50"
-                : "bg-green-100 text-green-700 hover:bg-green-200 disabled:bg-green-100 disabled:opacity-50"
-            }`}
-          >
-            {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-            {hasSubscription ? "Disable" : "Enable"}
-          </button>
+          <div className="flex items-center gap-3">
+            {hasSubscription && (
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  setShowPreferencesModal(true);
+                }}
+                className="px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 bg-blue-100 text-blue-700 hover:bg-blue-200"
+                title="Customize notification timing"
+              >
+                <Settings className="w-4 h-4" />
+              </button>
+            )}
+            <button
+              onClick={handleToggle}
+              disabled={isLoading}
+              className={`px-6 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+                hasSubscription
+                  ? "bg-red-100 text-red-700 hover:bg-red-200 disabled:bg-red-100 disabled:opacity-50"
+                  : "bg-green-100 text-green-700 hover:bg-green-200 disabled:bg-green-100 disabled:opacity-50"
+              }`}
+            >
+              {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+              {hasSubscription ? "Disable" : "Enable"}
+            </button>
+          </div>
         </div>
 
         {error && (
@@ -224,6 +241,14 @@ export default function PushNotificationToggle() {
           You can enable or disable notifications at any time. Your notification preferences are saved automatically.
         </p>
       </div>
+
+      {/* Preferences Modal - rendered with key to force remount */}
+      {showPreferencesModal && (
+        <NotificationPreferencesModal 
+          key={`preferences-modal-${Date.now()}`}
+          onClose={() => setShowPreferencesModal(false)} 
+        />
+      )}
     </div>
   );
 }

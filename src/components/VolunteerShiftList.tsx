@@ -69,9 +69,6 @@ export default function VolunteerShiftList({ activeTab }: VolunteerShiftListProp
   const [myShifts, setMyShifts] = useState<MyShift[]>([]);
   const [swapRequests, setSwapRequests] = useState<SwapRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [calendarToken, setCalendarToken] = useState<string | null>(null);
-  const [showCalendarModal, setShowCalendarModal] = useState(false);
-  const [copyFeedback, setCopyFeedback] = useState(false);
   const [copiedSwap, setCopiedSwap] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
@@ -83,10 +80,9 @@ export default function VolunteerShiftList({ activeTab }: VolunteerShiftListProp
   const loadData = async () => {
     setLoading(true);
     try {
-      const [eventsRes, assignmentsRes, tokenRes, swapsRes] = await Promise.all([
+      const [eventsRes, assignmentsRes, swapsRes] = await Promise.all([
         fetch("/api/events"),
         fetch("/api/volunteer/assignments"),
-        fetch("/api/volunteer/assignments/token"),
         fetch("/api/volunteer/swap-requests"),
       ]);
         // Build available shifts from events and group by event
@@ -211,11 +207,6 @@ export default function VolunteerShiftList({ activeTab }: VolunteerShiftListProp
           });
           setAvailableShifts(filtered);
           setAvailableByEvent(Object.values(groupedEvents));
-        }
-
-        if (tokenRes.ok) {
-          const { token } = await tokenRes.json();
-          setCalendarToken(token);
         }
 
         if (swapsRes.ok) {
@@ -454,15 +445,6 @@ export default function VolunteerShiftList({ activeTab }: VolunteerShiftListProp
     }
   };
 
-  const copyFeedUrl = () => {
-    if (!calendarToken) return;
-    const origin = typeof window !== "undefined" ? window.location.origin : "";
-    const feedUrl = `${origin}/api/volunteer/calendar?token=${calendarToken}`;
-    navigator.clipboard.writeText(feedUrl);
-    setCopyFeedback(true);
-    setTimeout(() => setCopyFeedback(false), 2000);
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -470,10 +452,6 @@ export default function VolunteerShiftList({ activeTab }: VolunteerShiftListProp
       </div>
     );
   }
-
-  const calendarFeedUrl = calendarToken
-    ? `${typeof window !== "undefined" ? window.location.origin : ""}/api/volunteer/calendar?token=${calendarToken}`
-    : "";
 
   const mySwapRequests = swapRequests.filter((r) => r.is_mine);
 
@@ -492,111 +470,6 @@ export default function VolunteerShiftList({ activeTab }: VolunteerShiftListProp
       )}
       {activeTab === "my-shifts" && (
         <>
-          {/* Calendar Sync Section */}
-          <section className="rounded-lg border border-blue-200 bg-blue-50 p-4">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-start gap-3">
-                <LinkIcon className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                <div>
-                  <h3 className="font-semibold text-blue-900">Sync to Your Calendar</h3>
-                  <p className="text-sm text-blue-700 mt-1">
-                    Subscribe to your shift calendar in Google Calendar, Apple Calendar, Outlook, or any calendar app.
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowCalendarModal(true)}
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors flex-shrink-0"
-              >
-                <LinkIcon className="h-4 w-4" />
-                Set Up
-              </button>
-            </div>
-          </section>
-
-      {/* Calendar Sync Modal */}
-      {showCalendarModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-lg max-w-lg w-full max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-slate-200">
-              <h2 className="text-lg font-semibold text-slate-900">Subscribe to Calendar</h2>
-              <button
-                onClick={() => setShowCalendarModal(false)}
-                className="p-1 hover:bg-slate-100 rounded-lg transition-colors"
-              >
-                <X className="h-5 w-5 text-slate-500" />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-6">
-              {/* Feed URL */}
-              <div>
-                <label className="block text-sm font-medium text-slate-900 mb-2">Calendar Feed URL</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value={calendarFeedUrl}
-                    className="flex-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm font-mono text-slate-600"
-                  />
-                  <button
-                    onClick={copyFeedUrl}
-                    className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors flex items-center gap-2"
-                  >
-                    <Copy className="h-4 w-4" />
-                    {copyFeedback ? "Copied!" : "Copy"}
-                  </button>
-                </div>
-              </div>
-
-              {/* Instructions */}
-              <div className="space-y-4">
-                <div>
-                  <h4 className="font-semibold text-slate-900 text-sm mb-2">Google Calendar</h4>
-                  <ol className="text-sm text-slate-700 space-y-1 list-decimal list-inside">
-                    <li>Open Google Calendar</li>
-                    <li>Click <span className="font-mono bg-slate-100 px-1 rounded">+</span> next to "Other calendars"</li>
-                    <li>Select "Subscribe to calendar"</li>
-                    <li>Paste the URL above and click "Subscribe"</li>
-                  </ol>
-                </div>
-
-                <div>
-                  <h4 className="font-semibold text-slate-900 text-sm mb-2">Apple Calendar / iCal</h4>
-                  <ol className="text-sm text-slate-700 space-y-1 list-decimal list-inside">
-                    <li>Open Calendar app</li>
-                    <li>Go to File → New Calendar Subscription</li>
-                    <li>Paste the URL above</li>
-                  </ol>
-                </div>
-
-                <div>
-                  <h4 className="font-semibold text-slate-900 text-sm mb-2">Outlook / Microsoft 365</h4>
-                  <ol className="text-sm text-slate-700 space-y-1 list-decimal list-inside">
-                    <li>Open Outlook Calendar</li>
-                    <li>Click "Add calendar" → "Subscribe from web"</li>
-                    <li>Paste the URL above</li>
-                  </ol>
-                </div>
-
-                <div className="rounded-lg bg-amber-50 border border-amber-200 p-3">
-                  <p className="text-xs text-amber-900">
-                    <strong>Keep your URL private.</strong> Anyone with this URL can see your calendar. Don't share it publicly or commit it to version control.
-                  </p>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setShowCalendarModal(false)}
-                className="w-full py-2 bg-slate-900 text-white rounded-lg font-medium hover:bg-slate-800 transition-colors"
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
           {/* My Schedule Section */}
           <section>
             <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
