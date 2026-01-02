@@ -85,6 +85,13 @@ Place your image files in `public/screenshots/` so they are served by Next.js wi
 - **Backend:** Supabase (PostgreSQL, Auth, Realtime)
 - **Hosting:** Vercel or any Node.js-compatible provider
 
+## 📋 What's Still Needed
+
+- **Notification/Reminder System:** Push notification UI exists, but backend scheduling for automatic reminders and understaffed shift alerts is not yet implemented.
+- **Reporting & Analytics:** CSV/PDF export for volunteer hours and shift history is not yet built.
+- **Check-In Feature:** The database field exists but check-in functionality for volunteers during events is not implemented.
+- **Draft/Publish Workflow:** Events currently cannot be put in draft mode; the `is_published` field exists but is unused.
+- **Audit Logging:** The database table exists but no activity tracking is currently implemented.
 
 ## 🌍 Get Involved
 
